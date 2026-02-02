@@ -290,7 +290,7 @@ export const encryptMessage = (message: string, params: ChaosParams, customKey?:
         const headerSize = 58;
         const saltSize = 32;
         const hmacSize = 16;
-        const customKeySize = customKey ? 1 + 16 : 0;
+        const customKeySize = customKey ? 1 + 32 : 0;
         const output = new Uint8Array(headerSize + saltSize + hmacSize + customKeySize + input.length);
         
         const header = packHeader(params);
@@ -301,7 +301,7 @@ export const encryptMessage = (message: string, params: ChaosParams, customKey?:
 
         if (customKey) {
             output[headerSize + saltSize + hmacSize] = CUSTOM_KEY_MARKER;
-            for(let i = 0; i < 16; i++) {
+            for(let i = 0; i < 32; i++) {
                 output[headerSize + saltSize + hmacSize + 1 + i] = customKey.metadata[i % customKey.metadata.length];
             }
         }
@@ -319,17 +319,11 @@ export const encryptMessage = (message: string, params: ChaosParams, customKey?:
             output[payloadStart + i] = c;
         }
 
-        const hmacData = new Uint8Array(headerSize + saltSize + payloadStart - (headerSize + saltSize + hmacSize) + input.length);
+        const hmacData = new Uint8Array(headerSize + saltSize + input.length);
         hmacData.set(header, 0);
         hmacData.set(salt, headerSize);
-        if (customKey) {
-            hmacData[headerSize + saltSize] = CUSTOM_KEY_MARKER;
-            for(let i = 0; i < 16; i++) {
-                hmacData[headerSize + saltSize + 1 + i] = customKey.metadata[i % customKey.metadata.length];
-            }
-        }
         for(let i=0; i<input.length; i++) {
-            hmacData[headerSize + saltSize + customKeySize + i] = output[payloadStart + i];
+            hmacData[headerSize + saltSize + i] = output[payloadStart + i];
         }
 
         const hmac = BitWeaver.computeHMAC(hmacData, HMAC_KEY);
@@ -363,21 +357,15 @@ export const decryptMessage = (blob: string, customKey?: CustomKey): { message: 
 
         if (data.length > 106 && data[106] === CUSTOM_KEY_MARKER) {
             useCustomKey = true;
-            payloadStart = 123;
+            payloadStart = 139;
         }
 
         const payload = data.slice(payloadStart);
 
-        const hmacData = new Uint8Array(58 + 32 + payloadStart - 106 + payload.length);
+        const hmacData = new Uint8Array(58 + 32 + payload.length);
         hmacData.set(headerBytes, 0);
         hmacData.set(salt, 58);
-        if (useCustomKey && customKey) {
-            hmacData[90] = CUSTOM_KEY_MARKER;
-            for(let i = 0; i < 16; i++) {
-                hmacData[91 + i] = customKey.metadata[i % customKey.metadata.length];
-            }
-        }
-        hmacData.set(payload, useCustomKey ? 107 : 106);
+        hmacData.set(payload, 90);
 
         const computedHmac = BitWeaver.computeHMAC(hmacData, HMAC_KEY);
         
@@ -443,8 +431,8 @@ export const generateRandomParams = (): ChaosParams => {
 };
 
 export const generateCustomKey = (): CustomKey => {
-    const key = new Uint8Array(64);
-    const metadata = new Uint8Array(16);
+    const key = new Uint8Array(256);
+    const metadata = new Uint8Array(32);
     crypto.getRandomValues(key);
     crypto.getRandomValues(metadata);
     
@@ -456,12 +444,12 @@ export const generateCustomKey = (): CustomKey => {
 };
 
 export const serializeCustomKey = (customKey: CustomKey): string => {
-    const combined = new Uint8Array(88);
+    const combined = new Uint8Array(296);
     combined.set(customKey.key, 0);
-    combined.set(customKey.metadata, 64);
+    combined.set(customKey.metadata, 256);
     
     const view = new DataView(combined.buffer);
-    view.setUint32(80, Math.floor(customKey.timestamp / 1000), false);
+    view.setUint32(288, Math.floor(customKey.timestamp / 1000), false);
     
     return btoa(String.fromCharCode(...combined));
 };
@@ -474,14 +462,14 @@ export const deserializeCustomKey = (serialized: string): CustomKey => {
             data[i] = raw.charCodeAt(i);
         }
         
-        if (data.length < 88) throw new Error("Invalid custom key format");
+        if (data.length < 296) throw new Error("Invalid custom key format");
         
         const view = new DataView(data.buffer);
-        const timestamp = view.getUint32(80, false) * 1000;
+        const timestamp = view.getUint32(288, false) * 1000;
         
         return {
-            key: data.slice(0, 64),
-            metadata: data.slice(64, 80),
+            key: data.slice(0, 256),
+            metadata: data.slice(256, 288),
             timestamp
         };
     } catch (e) {

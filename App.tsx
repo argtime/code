@@ -2,11 +2,21 @@ import React, { useState, useCallback } from 'react';
 import { ChaosParams, AppMode, CustomKey } from './types';
 import MatrixButton from './components/MatrixButton';
 import * as chaosEngine from './services/chaosEngine';
-import { Lock, Unlock, Shield, RefreshCw, Copy, AlertCircle, CheckCircle, Key } from 'lucide-react';
+import { Lock, Unlock, Shield, Copy, AlertCircle, CheckCircle, Key } from 'lucide-react';
+
+const DEFAULT_PARAMS: ChaosParams = {
+  sigma: 10.0,
+  rho: 28.0,
+  beta: 2.667,
+  startX: 1.0,
+  startY: 1.0,
+  startZ: 1.0,
+  iterations: 0
+};
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.ENCODE);
-  const [params, setParams] = useState<ChaosParams>(chaosEngine.generateRandomParams());
+  const [params, setParams] = useState<ChaosParams>(DEFAULT_PARAMS);
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -22,12 +32,6 @@ const App: React.FC = () => {
     setError('');
     setSuccess('');
   }, []);
-
-  const randomize = useCallback(() => {
-    setParams(chaosEngine.generateRandomParams());
-    setOutputText('');
-    clearMessages();
-  }, [clearMessages]);
 
   const generateNewCustomKey = useCallback(() => {
     const newKey = chaosEngine.generateCustomKey();
@@ -141,41 +145,46 @@ const App: React.FC = () => {
 
       {showKeySettings && (
         <div className="w-full max-w-2xl mb-6 bg-white border border-neutral-300 rounded p-4">
-          <h2 className="text-sm font-bold uppercase mb-4 flex items-center gap-2">
+          <h2 className="text-sm font-bold uppercase mb-2 flex items-center gap-2">
             <Key size={16} /> Custom Key Management
           </h2>
+          <p className="text-xs text-neutral-600 mb-4">
+            Custom keys add an extra layer of security. Recipients need both this website AND your custom key to decrypt.
+          </p>
           
           <div className="space-y-4">
-            <div>
-              <label className="text-xs font-bold text-neutral-500 uppercase mb-2 block">Generate New Key</label>
+            <div className="border border-neutral-200 rounded p-3 bg-neutral-50">
+              <label className="text-xs font-bold text-neutral-700 uppercase mb-2 block">Step 1: Generate New Key</label>
+              <p className="text-xs text-neutral-600 mb-2">Create a random 256-byte encryption key (2048 bits)</p>
               <button
                 onClick={generateNewCustomKey}
                 className="w-full py-2 px-3 bg-neutral-800 text-white text-xs font-bold uppercase hover:bg-neutral-900 transition-colors rounded"
               >
-                Generate Custom Key
+                Generate 256-Byte Custom Key
               </button>
               {customKey && (
-                <div className="mt-2 p-2 bg-neutral-50 border border-neutral-200 rounded text-xs break-all font-mono max-h-20 overflow-y-auto">
-                  {chaosEngine.serializeCustomKey(customKey).substring(0, 100)}...
-                </div>
-              )}
-              {customKey && (
-                <button
-                  onClick={copyKeyToClipboard}
-                  className="mt-2 w-full py-2 px-3 bg-blue-600 text-white text-xs font-bold uppercase hover:bg-blue-700 transition-colors rounded flex items-center justify-center gap-2"
-                >
-                  <Copy size={12} /> Copy Full Key
-                </button>
+                <>
+                  <div className="mt-2 p-2 bg-white border border-neutral-300 rounded text-xs break-all font-mono max-h-20 overflow-y-auto">
+                    {chaosEngine.serializeCustomKey(customKey).substring(0, 120)}...
+                  </div>
+                  <button
+                    onClick={copyKeyToClipboard}
+                    className="mt-2 w-full py-2 px-3 bg-blue-600 text-white text-xs font-bold uppercase hover:bg-blue-700 transition-colors rounded flex items-center justify-center gap-2"
+                  >
+                    <Copy size={12} /> Copy Full Key (Share Securely)
+                  </button>
+                </>
               )}
             </div>
 
-            <div className="border-t border-neutral-200 pt-4">
-              <label className="text-xs font-bold text-neutral-500 uppercase mb-2 block">Import Existing Key</label>
+            <div className="border border-neutral-200 rounded p-3 bg-neutral-50">
+              <label className="text-xs font-bold text-neutral-700 uppercase mb-2 block">Step 2: Import Existing Key (Optional)</label>
+              <p className="text-xs text-neutral-600 mb-2">Paste a custom key someone shared with you to decrypt their messages</p>
               <textarea
                 value={keyInput}
                 onChange={(e) => setKeyInput(e.target.value)}
-                placeholder="Paste your custom key here..."
-                className="w-full h-20 bg-neutral-50 border border-neutral-200 p-2 text-xs font-mono focus:border-black focus:bg-white focus:outline-none transition-colors resize-none"
+                placeholder="Paste custom key here (Base64 format)..."
+                className="w-full h-20 bg-white border border-neutral-300 p-2 text-xs font-mono focus:border-black focus:outline-none transition-colors resize-none"
               />
               <button
                 onClick={importCustomKey}
@@ -185,7 +194,8 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            <div className="border-t border-neutral-200 pt-4">
+            <div className="border border-neutral-200 rounded p-3 bg-blue-50 border-blue-300">
+              <label className="text-xs font-bold text-neutral-700 uppercase mb-2 block">Step 3: Enable Custom Key</label>
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -194,10 +204,15 @@ const App: React.FC = () => {
                   disabled={!customKey}
                   className="w-4 h-4"
                 />
-                <span className="text-xs font-bold text-neutral-700">
-                  {customKey ? 'Use Custom Key for Encryption/Decryption' : 'Load a custom key first'}
+                <span className="text-xs font-bold text-neutral-800">
+                  {customKey ? '✓ Use this custom key for encrypt/decrypt operations' : '⚠️ Generate or import a key first'}
                 </span>
               </label>
+              {useCustomKey && (
+                <p className="text-xs text-blue-700 mt-2 font-mono">
+                  🔐 Custom key mode active - Recipients will need your key + this website to decrypt
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -306,16 +321,6 @@ const App: React.FC = () => {
               >
                 {isProcessing ? 'Decrypting...' : 'Decrypt'} <Unlock size={13} className="inline ml-2" />
               </MatrixButton>
-            )}
-
-            {mode === AppMode.ENCODE && (
-              <button
-                onClick={randomize}
-                disabled={isProcessing}
-                className="px-4 py-2.5 bg-neutral-200 hover:bg-neutral-300 disabled:bg-neutral-300 text-neutral-700 text-xs font-bold uppercase transition-colors rounded border border-neutral-300 flex items-center gap-2"
-              >
-                <RefreshCw size={13} /> New Key
-              </button>
             )}
           </div>
         </div>
