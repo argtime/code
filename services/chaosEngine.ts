@@ -356,8 +356,28 @@ export const decryptMessage = (blob: string, customKey?: CustomKey): { message: 
         let useCustomKey = false;
 
         if (data.length > 106 && data[106] === CUSTOM_KEY_MARKER) {
+            if (!customKey) {
+                throw new Error("This message was encrypted with a custom key. Please provide the custom key to decrypt.");
+            }
+            
+            // Verify custom key metadata matches
+            const storedMetadata = data.slice(107, 139);
+            let metadataMatch = true;
+            for(let i = 0; i < 32; i++) {
+                if (storedMetadata[i] !== customKey.metadata[i % customKey.metadata.length]) {
+                    metadataMatch = false;
+                    break;
+                }
+            }
+            if (!metadataMatch) {
+                throw new Error("Invalid custom key: metadata mismatch");
+            }
+            
             useCustomKey = true;
             payloadStart = 139;
+        } else if (customKey) {
+            // User provided a custom key but message wasn't encrypted with one
+            throw new Error("This message was encrypted with the default key, not a custom key.");
         }
 
         const payload = data.slice(payloadStart);
